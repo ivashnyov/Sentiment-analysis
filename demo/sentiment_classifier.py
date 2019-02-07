@@ -1,40 +1,50 @@
+from keras.models import load_model
+from keras.datasets import imdb
+from keras.preprocessing import sequence
+import tensorflow as tf
+
+
+def import_model(filename):
+    global model
+    model = load_model(filename)
+    global graph
+    graph = tf.get_default_graph()
+    return model
+
+
 class SentimentClassifier(object):
     def __init__(self):
-        self.model = joblib.load("./DefaultLogisticBigramUnprocessedTextSentiment.pkl")
-        self.vectorizer = joblib.load("./BigramUnprocessedVectorizer.pkl")
+        self.model = import_model('imdb_model.h5')
+        self.word_to_index = imdb.get_word_index()
+        self.max_review_length = 2000
         self.classes_dict = {0: "negative", 1: "positive", -1: "prediction error"}
 
     @staticmethod
-    def get_probability_words(probability):
-        if probability < 0.55:
-            return "neutral or uncertain"
-        if probability < 0.7:
-            return "probably"
-        if probability > 0.95:
-            return "certain"
+    def get_tonality(probability):
+        if probability > 0.65:
+            return "Good"
+        if probability < 0.35:
+            return "Bad"
         else:
-            return ""
+            return "Neutral"
 
     def predict_text(self, text):
         try:
-            vectorized = self.vectorizer.transform([text])
-            return self.model.predict(vectorized)[0],\
-                   self.model.predict_proba(vectorized)[0].max()
-        except:
-            print "prediction error"
-            return -1, 0.8
-
-    def predict_list(self, list_of_texts):
-        try:
-            vectorized = self.vectorizer.transform(list_of_texts)
-            return self.model.predict(vectorized),\
-                   self.model.predict_proba(vectorized)
-        except:
-            print ('prediction error')
-            return None
+            words = text.split()
+            review = []
+            for word in words:
+                if word not in self.word_to_index:
+                    review.append(2)
+                else:
+                    review.append(self.word_to_index[word] + 3)
+            review = sequence.pad_sequences([review], truncating='pre', padding='pre', maxlen=self.max_review_length)
+            with graph.as_default():
+                prediction = self.model.predict(review)
+            return prediction[0][0]
+        except Exception as e:
+            print(e)
+            return -1
 
     def get_prediction_message(self, text):
         prediction = self.predict_text(text)
-        class_prediction = prediction[0]
-        prediction_probability = prediction[1]
-        return self.get_probability_words(prediction_probability) + " " + self.classes_dict[class_prediction]
+        return prediction
